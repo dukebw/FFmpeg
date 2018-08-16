@@ -2370,6 +2370,10 @@ static int read_interval_packets(WriterContext *w, InputFile *ifile,
         ret = AVERROR(ENOMEM);
         goto end;
     }
+    /**
+     * NOTE(brendan): Main frame reading loop for ffprobe with count_frames is
+     * here.
+     */
     while (!av_read_frame(fmt_ctx, &pkt)) {
         if (fmt_ctx->nb_streams > nb_streams) {
             REALLOCZ_ARRAY_STREAM(nb_streams_frames,  nb_streams, fmt_ctx->nb_streams);
@@ -2407,6 +2411,11 @@ static int read_interval_packets(WriterContext *w, InputFile *ifile,
                 nb_streams_packets[pkt.stream_index]++;
             }
             if (do_read_frames) {
+                /**
+                 * NOTE(brendan): process_frame calls send_packet/receive_frame
+                 * until both: no frame was received, and the current packet
+                 * has been sent.
+                 */
                 int packet_new = 1;
                 while (process_frame(w, ifile, frame, &pkt, &packet_new) > 0);
             }
@@ -2416,10 +2425,18 @@ static int read_interval_packets(WriterContext *w, InputFile *ifile,
     av_init_packet(&pkt);
     pkt.data = NULL;
     pkt.size = 0;
+    /**
+     * NOTE(brendan): Extra frames are still in the decoder here. (E.g., 2
+     * extra frames in 168 frame video).
+     */
     //Flush remaining frames that are cached in the decoder
     for (i = 0; i < fmt_ctx->nb_streams; i++) {
         pkt.stream_index = i;
         if (do_read_frames)
+            /**
+             * NOTE(brendan): process_frame increments
+             * nb_streams_frames[stream_index].
+             */
             while (process_frame(w, ifile, frame, &pkt, &(int){1}) > 0);
     }
 
